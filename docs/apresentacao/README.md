@@ -2,7 +2,7 @@
 
 Roteiros, cenários planejados, causas, soluções e registros de ensaio ficam somente neste diretório do Patchwork. Este material é destinado a quem prepara e avalia a apresentação e não integra as skills fornecidas ao agente.
 
-[Roteiro da sessão](../ROTEIRO.md).
+[Roteiro da sessão](../ROTEIRO.md). O cenário principal é [CHK-003: envio duplicado e encaminhamento opcional](chk-003/ROTEIRO.md); CHK-001 permanece como contingência de reparo local. Consulte também o [registro de validação](chk-003/VALIDACAO.md).
 
 | Aplicação | Material |
 | --- | --- |
