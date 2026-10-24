@@ -66,7 +66,7 @@ export function prepareDocumentation(automation, app) {
   }
 }
 
-export function prepareContext({ config, automation = 'automation', app = 'app', home, mcpRoot = packageRoot }) {
+export function prepareContext({ config, automation = 'automation', app = 'app', home, mcpRoot = packageRoot, incident }) {
   const trustedSkills = resolve(automation, '.agents/skills');
   verifyTree(trustedSkills);
   if (!existsSync(resolve(trustedSkills, 'service-regression/SKILL.md'))) throw new Error('Skill service-regression ausente.');
@@ -84,6 +84,7 @@ export function prepareContext({ config, automation = 'automation', app = 'app',
   }
   cpSync(trustedSkills, destination, { recursive: true });
   cpSync(resolve(packageRoot, 'skills/patchwork-investigation'), resolve(destination, 'patchwork-investigation'), { recursive: true });
+  if (config.handoff) cpSync(resolve(packageRoot, 'skills/patchwork-handoff'), resolve(destination, 'patchwork-handoff'), { recursive: true });
   cpSync(resolve(automation, 'AGENTS.md'), resolve(appRoot, 'AGENTS.md'));
   const githubDir = resolve(appRoot, '.github');
   if (existsSync(githubDir) && lstatSync(githubDir).isSymbolicLink()) throw new Error('.github fora do checkout.');
@@ -96,18 +97,20 @@ export function prepareContext({ config, automation = 'automation', app = 'app',
   const server = resolve(mcpRoot, 'node_modules/@sentry/mcp-server/dist/index.js');
   if (!existsSync(server)) throw new Error('Instale as dependências do Patchwork antes de configurar o MCP.');
   // Persistir apenas referências. O executor injeta o secret diretamente no MCP.
+  const sentry = incident?.sourceSentry ?? config.sentry;
   const context = {
     app: appRoot,
     skillDirectories: [destination],
-    mcp: { command: process.execPath, args: [server, '--organization-slug', config.sentry.org, '--project-slug', config.sentry.project, '--skills=inspect', '--sentry-dsn='], tools: sentryTools, timeout: 60000 },
+    mcp: { command: process.execPath, args: [server, '--organization-slug', sentry.org, '--project-slug', sentry.project, '--skills=inspect', '--sentry-dsn='], tools: sentryTools, timeout: 60000 },
   };
   writeFileSync(resolve(home, 'context.json'), JSON.stringify(context, null, 2));
-  return { skills: names, server: 'sentry', project: config.sentry.project, tools: sentryTools };
+  return { skills: names, server: 'sentry', project: sentry.project, tools: sentryTools };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const config = loadConfig(process.env.PATCHWORK_CONFIG ?? '.github/patchwork.json');
-  const result = prepareContext({ config, home: resolve(process.env.RUNNER_TEMP, 'patchwork-copilot') });
+  const incident = JSON.parse(readFileSync(resolve(process.env.RUNNER_TEMP, 'incident.json'), 'utf8'));
+  const result = prepareContext({ config, incident, home: resolve(process.env.RUNNER_TEMP, 'patchwork-copilot') });
   writeFileSync(resolve(process.env.RUNNER_TEMP, 'agent-context.json'), JSON.stringify(result, null, 2));
   console.log(`Skills disponíveis: ${result.skills.join(', ')}. MCP sentry restrito a ${result.project}.`);
 }

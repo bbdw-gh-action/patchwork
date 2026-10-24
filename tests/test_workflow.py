@@ -49,6 +49,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(steps[agent]['env'], {'SENTRY_ACCESS_TOKEN':'${{ secrets.SENTRY_AUTH_TOKEN }}',
             'GITHUB_TOKEN':'${{ github.token }}', 'COPILOT_MODEL':'${{ inputs.copilot_model }}'})
 
+    def test_handoff_is_optional_and_app_key_never_reaches_agent(self):
+        self.assertEqual(JOBS['validate']['if'], "needs.propose.outputs.outcome == 'repair'")
+        self.assertEqual(JOBS['handoff']['if'], "needs.propose.outputs.outcome == 'handoff'")
+        self.assertEqual(JOBS['handoff']['needs'], ['prepare', 'propose'])
+        self.assertIn('needs.prepare.outputs.incident', JOBS['handoff']['concurrency']['group'])
+        for name, job in JOBS.items():
+            if name != 'handoff':
+                self.assertNotIn('secrets.PATCHWORK_APP_PRIVATE_KEY', str(job))
+        self.assertEqual([s['run'] for s in JOBS['handoff']['steps'] if 'run' in s],
+                         ['node patchwork/scripts/engine.mjs handoff'])
+        self.assertNotIn('working-directory', str(JOBS['handoff']))
+
     def test_v3_contract_and_process_isolation(self):
         interface = WORKFLOW['on']['workflow_call']
         self.assertNotIn('OPENAI_API_KEY', interface['secrets'])

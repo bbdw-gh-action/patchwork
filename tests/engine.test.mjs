@@ -58,6 +58,14 @@ test('configuração e skills vêm do checkout confiável; contexto não contém
   assert.equal(context.app,app);
   assert.equal(context.mcp.timeout,60000);
   assert.deepEqual(result.tools,sentryTools);
+  const routed = prepareContext({ config: { ...config, handoff: { targets: [], sources: [] } }, automation, app, home,
+    incident: { sourceSentry: { org: 'example', project: 'checkout', projectId: '456' } } });
+  assert.deepEqual(routed.skills.sort(), ['patchwork-handoff','patchwork-investigation','service-regression']);
+  assert.equal(routed.project, 'checkout');
+  const routedContext = JSON.parse(readFileSync(resolve(home, 'context.json'), 'utf8'));
+  assert.ok(routedContext.mcp.args.includes('checkout'));
+  assert.equal(existsSync(resolve(app, 'docs/apresentacao')), false);
+  assert.equal(existsSync(resolve(app, '.agents/skills/patchwork-handoff/references/services.md')), true);
 });
 
 test('revisão antiga perde gabaritos e adaptadores; fontes e testes da aplicação são preservados', t => {

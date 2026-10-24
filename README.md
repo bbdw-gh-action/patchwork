@@ -111,6 +111,8 @@ O actionlint 1.7.12 ainda desconhece `job.workflow_sha`, `job.workflow_repositor
 
 ## Referências
 
+O [encaminhamento opcional entre repositórios](docs/HANDOFF.md) é uma saída alternativa quando a investigação encontra evidências de outro responsável. Reparos locais continuam usando o mesmo fluxo e exigindo regressão antes/depois; não existe triagem prévia obrigatória.
+
 - [Identidade de workflows reutilizáveis](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#example-usage-of-job-context-workflow-identity)
 - [Copilot SDK](https://github.com/github/copilot-sdk)
 - [Autenticação no Actions](https://docs.github.com/en/copilot/how-tos/copilot-sdk/auth/server-to-server-tokens)

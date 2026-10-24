@@ -29,6 +29,8 @@ on:
     secrets:
       SENTRY_AUTH_TOKEN:
         required: true
+      PATCHWORK_APP_PRIVATE_KEY:
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -47,6 +49,7 @@ jobs:
     outputs:
       sha: ${{ steps.incident.outputs.sha }}
       issue: ${{ steps.incident.outputs.issue }}
+      incident: ${{ steps.incident.outputs.incident }}
     steps:
       - name: Obter o motor Patchwork da revisão chamada
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -69,6 +72,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PATCHWORK_APP_ID: ${{ vars.PATCHWORK_APP_ID }}
+          PATCHWORK_BOT_ID: ${{ vars.PATCHWORK_BOT_ID }}
+          PATCHWORK_APP_PUBLIC_KEY: ${{ vars.PATCHWORK_APP_PUBLIC_KEY }}
       - name: Conferir identidade resolvida pelo adaptador
         env:
           BASE_SHA: ${{ steps.incident.outputs.sha }}
@@ -88,6 +94,8 @@ jobs:
           retention-days: 7
   propose:
     needs: prepare
+    outputs:
+      outcome: ${{ steps.export.outputs.outcome }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -143,7 +151,8 @@ jobs:
           COPILOT_MODEL: ${{ inputs.copilot_model }}
         run: bash patchwork/scripts/run-agent.sh
       # Após o agente, só exportar a proposta; executar código em outro runner.
-      - run: node patchwork/scripts/engine.mjs export
+      - id: export
+        run: node patchwork/scripts/engine.mjs export
         env:
           BASE_SHA: ${{ needs.prepare.outputs.sha }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -152,12 +161,14 @@ jobs:
           name: proposal
           path: |
             ${{ runner.temp }}/candidate.patch
+            ${{ runner.temp }}/handoff.json
             ${{ runner.temp }}/report.md
             ${{ runner.temp }}/agent-context.json
             ${{ runner.temp }}/execution.json
           retention-days: 7
   validate:
     needs: [prepare, propose]
+    if: needs.propose.outputs.outcome == 'repair'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -240,9 +251,55 @@ jobs:
         with:
           name: validation
           path: ${{ runner.temp }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: incident
+          path: ${{ runner.temp }}
       - name: Abrir PR sem executar a proposta
         run: node patchwork/scripts/engine.mjs publish
         env:
           GH_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ needs.prepare.outputs.sha }}
           ISSUE_NUMBER: ${{ needs.prepare.outputs.issue }}
+  handoff:
+    needs: [prepare, propose]
+    if: needs.propose.outputs.outcome == 'handoff'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    concurrency:
+      group: handoff-${{ github.repository }}-${{ needs.prepare.outputs.incident }}-${{ needs.prepare.outputs.sha }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: patchwork
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: ${{ inputs.node_version }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: incident
+          path: ${{ runner.temp }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: proposal
+          path: ${{ runner.temp }}
+      - name: Validar e publicar issue vinculada sem executar a proposta
+        run: node patchwork/scripts/engine.mjs handoff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PATCHWORK_APP_ID: ${{ vars.PATCHWORK_APP_ID }}
+          PATCHWORK_BOT_ID: ${{ vars.PATCHWORK_BOT_ID }}
+          PATCHWORK_INSTALLATION_ID: ${{ vars.PATCHWORK_INSTALLATION_ID }}
+          PATCHWORK_APP_PUBLIC_KEY: ${{ vars.PATCHWORK_APP_PUBLIC_KEY }}
+          PATCHWORK_APP_PRIVATE_KEY: ${{ secrets.PATCHWORK_APP_PRIVATE_KEY }}
